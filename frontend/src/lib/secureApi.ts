@@ -1450,6 +1450,13 @@ export class SecureAPIClient {
 
   // ============= DASHBOARD API =============
   /**
+   * Get tenant-scoped properties for the dashboard
+   */
+  async getDashboardProperties(): Promise<Array<{ id: string; name: string }>> {
+    return this.request<Array<{ id: string; name: string }>>('/api/v1/dashboard/properties');
+  }
+
+  /**
    * Get dashboard summary with optional simulation header
    */
   async getDashboardSummary(propertyId: string, options?: { simulatedTenant?: string, timestamp?: number }) {
