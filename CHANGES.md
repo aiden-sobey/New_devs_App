@@ -1,7 +1,8 @@
 ## Property Revenue Dashboard
 
 Interviewee: Aiden Sobey
-Total time: 1h 20m
+Total time: 1h 15m
+Loom: https://www.loom.com/share/47734bee8eec43d68680af7e1f4adbc1
 
 ### 1. Cross-tenant cache key collision
 
