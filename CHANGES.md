@@ -1,6 +1,7 @@
-# Improvements
-
 ## Property Revenue Dashboard
+
+Interviewee: Aiden Sobey
+Total time: 1h 20m
 
 ### 1. Cross-tenant cache key collision
 
@@ -38,7 +39,30 @@
 
 ---
 
-### 4. Dashboard endpoint falls back to "default_tenant"
+### 4. Database queries always fail, dashboard falls back to mock data
+
+**Files:** `backend/app/core/database_pool.py`, `backend/app/main.py`, `backend/app/services/reservations.py`
+
+**Customer Impact:** The dashboard and reservations endpoints never returned real database data. Every query silently failed and the API served hardcoded mock values instead, meaning the dashboard was completely non-functional against the actual database.
+
+**Technical Issue:** Three compounding bugs prevented any database query from succeeding:
+
+1. **`get_session()` was `async def` but contained no awaits.** Because it was declared `async`, calling `db_pool.get_session()` returned a coroutine object rather than the `AsyncSession` context manager that callers expected.
+
+2. **The Supabase connection pool initialized unconditionally without credentials.** `main.py` called `supabase_pool.initialize()` on every startup, but `supabase_url` and `supabase_service_role_key` default to `None` in config.
+
+3. **`reservations.py` created a throwaway `DatabasePool` on every request.** Instead of using the shared `db_pool` singleton initialized at startup, it instantiated a new `DatabasePool()` and called `initialize()` per request, creating a fresh engine and connection pool each time.
+
+**Remediation:**
+
+- Removed `async` from `get_session()` so it returns the `AsyncSession` context manager directly, which is what `async with` expects.
+- Guarded Supabase pool initialization and shutdown in `main.py` with a check for `settings.supabase_url and settings.supabase_service_role_key`, skipping it entirely when credentials are not configured.
+- Changed `reservations.py` to import and use the shared `db_pool` singleton instead of constructing a new pool per request.
+- Fixed the pool class from `QueuePool` (sync) to `AsyncAdaptedQueuePool` (async-compatible) and simplified the database URL construction to use `settings.database_url`.
+
+---
+
+### 5. Dashboard endpoint falls back to "default_tenant"
 
 **File:** `backend/app/api/v1/dashboard.py`
 
@@ -50,7 +74,7 @@
 
 ---
 
-### 5. Frontend hardcodes all properties for all tenants
+### 6. Frontend hardcodes all properties for all tenants
 
 **Files:** `frontend/src/components/Dashboard.tsx`, `backend/app/api/v1/dashboard.py`, `frontend/src/lib/secureApi.ts`
 
@@ -62,7 +86,7 @@
 
 ---
 
-### 6. Frontend rejects valid non-UUID tenant IDs
+### 7. Frontend rejects valid non-UUID tenant IDs
 
 **File:** `frontend/src/lib/secureApi.ts`
 
@@ -71,3 +95,4 @@
 **Technical Issue:** The `isValidTenantId()` method only accepted UUID format (`/^[0-9a-f]{8}-...-[0-9a-f]{12}$/`), but the actual tenant IDs in the system are slug-format strings like `tenant-a` and `tenant-b`. This caused `getTenantId()` to always return `null`, which disabled cache-key generation, bypassed deduplication, and triggered security warning logs on every request.
 
 **Remediation:** Updated `isValidTenantId()` to accept both UUID format and slug format (`/^[a-z0-9][a-z0-9_-]{0,62}$/i`). The slug regex allows alphanumeric strings with hyphens and underscores up to 63 characters, which covers the current tenant ID scheme while still rejecting empty or malformed values.
+
