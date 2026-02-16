@@ -90,15 +90,27 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up...")
 
-    # Initialize Supabase connection pool
-    try:
-        from .core.supabase_connection_pool import supabase_pool
+    # Initialize Supabase connection pool (only if credentials configured)
+    from .config import settings
+    if settings.supabase_url and settings.supabase_service_role_key:
+        try:
+            from .core.supabase_connection_pool import supabase_pool
 
-        await supabase_pool.initialize()
-        logger.info("✅ Supabase connection pool initialized")
+            await supabase_pool.initialize()
+            logger.info("✅ Supabase connection pool initialized")
+        except Exception as e:
+            logger.error(f"❌ Supabase connection pool initialization failed: {e}")
+            # Continue startup - fallback to direct connections
+    else:
+        logger.info("Supabase credentials not configured, skipping Supabase pool")
+
+    # Initialize database connection pool
+    try:
+        from .core.database_pool import db_pool
+
+        await db_pool.initialize()
     except Exception as e:
-        logger.error(f"❌ Supabase connection pool initialization failed: {e}")
-        # Continue startup - fallback to direct connections
+        logger.error(f"❌ Database pool initialization failed: {e}")
 
     # Initialize Redis connection with timeout
     try:
@@ -127,14 +139,22 @@ async def lifespan(app: FastAPI):
     await async_processor.shutdown()
     logger.info("Async processor shutdown completed")
 
-    # Close connection pool
-    try:
-        from .core.supabase_connection_pool import supabase_pool
+    # Close connection pools
+    if settings.supabase_url and settings.supabase_service_role_key:
+        try:
+            from .core.supabase_connection_pool import supabase_pool
 
-        await supabase_pool.close()
-        logger.info("✅ Supabase connection pool closed")
+            await supabase_pool.close()
+            logger.info("✅ Supabase connection pool closed")
+        except Exception as e:
+            logger.warning(f"⚠️ Error closing connection pool: {e}")
+
+    try:
+        from .core.database_pool import db_pool
+
+        await db_pool.close()
     except Exception as e:
-        logger.warning(f"⚠️ Error closing connection pool: {e}")
+        logger.warning(f"⚠️ Error closing database pool: {e}")
 
 
 app = FastAPI(
